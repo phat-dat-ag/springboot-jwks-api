@@ -1,0 +1,115 @@
+# ==========================================
+# Maven / Build
+# ==========================================
+target/
+build/
+out/
+*.class
+*.log
+
+# Maven Wrapper
+.mvn/wrapper/maven-wrapper.jar
+
+# Generated documentation
+HELP.md
+
+# ==========================================
+# IDE - IntelliJ IDEA
+# ==========================================
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# ==========================================
+# IDE - Eclipse / STS
+# ==========================================
+.apt_generated/
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+
+# ==========================================
+# IDE - NetBeans
+# ==========================================
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# ==========================================
+# IDE - VS Code
+# ==========================================
+.vscode/
+
+# ==========================================
+# Environment Variables / Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Local configuration
+application-local.properties
+application-local.yml
+application-local.yaml
+
+# ==========================================
+# RSA / JWT / JWKS Keys
+# ==========================================
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.der
+
+# Certificate signing requests
+*.csr
+
+# ==========================================
+# Logs
+# ==========================================
+logs/
+log/
+*.log
+*.log.*
+*.log.gz
+
+# ==========================================
+# Runtime / Temporary Files
+# ==========================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# ==========================================
+# Operating System
+# ==========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================================
+# Test / Coverage Reports
+# ==========================================
+coverage/
+.jacoco/
+jacoco.exec
+
+# ==========================================
+# Docker Local Overrides
+# ==========================================
+docker-compose.override.yml
+docker-compose.override.yaml
+compose.override.yml
+compose.override.yaml
