@@ -28,6 +28,9 @@
     <!-- The starter's generated development password must never appear in logs. -->
     <logger name="org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration" level="OFF"/>
 
+    <!-- The request filter records missing routes safely; Spring's warning includes raw paths. -->
+    <logger name="org.springframework.web.servlet.PageNotFound" level="OFF"/>
+
     <root level="${LOG_LEVEL}">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
