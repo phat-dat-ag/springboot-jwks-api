@@ -54,7 +54,7 @@ can contain credentials or key material. Cause traversal is bounded and cycle-sa
 The starter's generated development-password logger is disabled without changing
 authentication behavior.
 
-There are currently no JWKS business operations or global exception handlers.
+There are currently no JWKS business operations. The global exception handler hands handled server exceptions to the request filter for a single completion log; client failures use the existing WARN completion event.
 This implementation adds no endpoints or authentication changes.
 
 ## Files and retention

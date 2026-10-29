@@ -104,6 +104,19 @@ public final class RequestLoggingFilter extends OncePerRequestFilter {
         }
     }
 
+    /**
+     * Hand diagnostics to the existing completion event instead of logging an exception twice.
+     */
+    public static boolean recordHandledFailure(HttpServletRequest request, Throwable failure) {
+        if (request.getAttribute(STATE_ATTRIBUTE) instanceof RequestState state) {
+            state.failure = failure;
+
+            return true;
+        }
+
+        return false;
+    }
+
     private static final class RequestState implements AsyncListener {
         private final HttpServletRequest request;
         private final HttpServletResponse response;
