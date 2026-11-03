@@ -10,6 +10,7 @@ import jakarta.servlet.ServletException;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,9 +34,13 @@ public final class RequestLoggingFilter extends OncePerRequestFilter {
     public static final String CORRELATION_HEADER = "X-Correlation-ID";
     private static final String STATE_ATTRIBUTE = RequestLoggingFilter.class.getName() + ".state";
     private static final Pattern VALID_ID = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
+    private static final Pattern TRACE_PARENT = Pattern.compile("00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}");
     private static final Set<String> METHODS = Set.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE");
     private static final Set<String> REQUEST_FIELDS = Set.of(
-            "correlationId", "httpMethod", "uri", "status", "elapsed_ms", "exception_type"
+            "correlationId", "httpMethod", "uri", "status", "elapsed_ms", "exception_type",
+            "event", "callerService", "callerInstance", "callerVersion", "callerIdentitySource",
+            "peerAddress", "userAgent", "protocol", "callerTraceId", "callerSpanId", "errorCode",
+            "key_count", "asyncTimedOut"
     );
     private static final Logger log = LoggerFactory.getLogger(RequestLoggingFilter.class);
 
@@ -70,6 +75,12 @@ public final class RequestLoggingFilter extends OncePerRequestFilter {
 
         try (MdcScope ignored = new MdcScope(current, isAsyncDispatch(request))) {
             current.captureTrace();
+
+            if (current.startedLogged.compareAndSet(false, true)) {
+                log.atDebug()
+                        .addKeyValue("event", "http.request.started")
+                        .log("API request started");
+            }
 
             HttpServletRequest wrapped = new HttpServletRequestWrapper(request) {
                 @Override
@@ -117,22 +128,83 @@ public final class RequestLoggingFilter extends OncePerRequestFilter {
         return false;
     }
 
+    public static void recordErrorCode(HttpServletRequest request, String code) {
+        if (request.getAttribute(STATE_ATTRIBUTE) instanceof RequestState state) {
+            state.errorCode = code;
+        }
+    }
+
+    // Only explicitly approved headers are inspected. Duplicate values are ambiguous.
+    private static String singleHeader(HttpServletRequest request, String name) {
+        var values = request.getHeaders(name);
+
+        if (values == null || !values.hasMoreElements())
+            return null;
+
+        String value = values.nextElement();
+
+        return values.hasMoreElements() ? null : value;
+    }
+
+    private static String safeText(String value, int limit) {
+        if (value == null || value.isBlank()) return "unknown";
+        // Bound log volume and remove control characters, including terminal escape sequences.
+        StringBuilder result = new StringBuilder();
+
+        for (int i = 0; i < value.length() && result.length() < limit; i++) {
+            char c = value.charAt(i);
+            result.append(c >= 32 && c <= 126 ? c : '_');
+        }
+
+        return result.toString();
+    }
+
+    private static String identity(HttpServletRequest request, String header) {
+        String value = singleHeader(request, header);
+
+        return value != null && VALID_ID.matcher(value).matches() ? value : "unknown";
+    }
+
     private static final class RequestState implements AsyncListener {
         private final HttpServletRequest request;
         private final HttpServletResponse response;
         private final String correlationId;
         private final long started = System.nanoTime();
         private final AtomicBoolean logged = new AtomicBoolean();
+        private final AtomicBoolean startedLogged = new AtomicBoolean();
         private final AtomicBoolean listenerRegistered = new AtomicBoolean();
         private volatile Throwable failure;
         private volatile boolean timedOut;
         private volatile String traceId;
         private volatile String spanId;
+        private volatile String errorCode;
+        private final Map<String, String> metadata;
 
         private RequestState(HttpServletRequest request, HttpServletResponse response, String correlationId) {
             this.request = request;
             this.response = response;
             this.correlationId = correlationId;
+
+            Map<String, String> fields = new LinkedHashMap<>();
+            fields.put("callerService", identity(request, "X-Caller-Service"));
+            fields.put("callerInstance", identity(request, "X-Caller-Instance"));
+            fields.put("callerVersion", identity(request, "X-Caller-Version"));
+            fields.put("callerIdentitySource", "self-reported");
+            fields.put("peerAddress", safeText(request.getRemoteAddr(), 64));
+            fields.put("userAgent", safeText(singleHeader(request, "User-Agent"), 256));
+            fields.put("protocol", safeText(request.getProtocol(), 32));
+            String parent = singleHeader(request, "traceparent");
+
+            if (parent != null) {
+                var match = TRACE_PARENT.matcher(parent);
+                if (match.matches() && !match.group(1).equals("0".repeat(32))
+                        && !match.group(2).equals("0".repeat(16))) {
+                    fields.put("callerTraceId", match.group(1));
+                    fields.put("callerSpanId", match.group(2));
+                }
+            }
+
+            metadata = Map.copyOf(fields);
         }
 
         private void captureTrace() {
@@ -165,6 +237,10 @@ public final class RequestLoggingFilter extends OncePerRequestFilter {
 
                 MDC.put("status", Integer.toString(status));
                 MDC.put("elapsed_ms", Long.toString((System.nanoTime() - started) / 1_000_000));
+                MDC.put("event", "http.request.completed");
+                MDC.put("asyncTimedOut", Boolean.toString(timedOut));
+
+                if (errorCode != null) MDC.put("errorCode", errorCode);
 
                 if (failure != null) {
                     MDC.put("exception_type", failure.getClass().getName());
@@ -210,6 +286,8 @@ public final class RequestLoggingFilter extends OncePerRequestFilter {
             REQUEST_FIELDS.forEach(MDC::remove);
 
             MDC.put("correlationId", state.correlationId);
+
+            state.metadata.forEach(MDC::put);
 
             if (restoreTrace) {
                 MDC.remove("traceId");

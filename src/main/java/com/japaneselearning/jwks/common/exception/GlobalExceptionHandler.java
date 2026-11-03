@@ -180,6 +180,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             return null;
         }
 
+        if (request instanceof ServletWebRequest servlet) {
+            RequestLoggingFilter.recordErrorCode(servlet.getRequest(), code.name());
+        }
+
         if (status.is5xxServerError()) {
             boolean recorded = request instanceof ServletWebRequest servlet
                     && RequestLoggingFilter.recordHandledFailure(servlet.getRequest(), ex);

@@ -42,6 +42,57 @@ Trace/span IDs are included when supplied by existing instrumentation through MD
 No tracing SDK or external exporter is added, and incoming trace headers are not
 treated as trusted log metadata.
 
+### Identifying callers
+
+Have each caller send these headers on its JWKS HTTP requests:
+
+```http
+X-Caller-Service: user-service
+X-Caller-Instance: user-service-pod-7
+X-Caller-Version: 1.2.3
+X-Correlation-ID: request-123
+traceparent: 00-0123456789abcdef0123456789abcdef-0123456789abcdef-01
+```
+
+The three caller identity headers use the same single-value, 1-64 character
+validation as correlation IDs. Missing, invalid or duplicate caller headers become
+`unknown`. They appear as `callerService`, `callerInstance`, and `callerVersion` in
+application logs during the request and in its completion event, including async
+completion. `callerIdentitySource=self-reported` explicitly marks these as claims,
+not authenticated identities. Anonymous callers cannot be reliably identified by
+service name without caller cooperation or an authenticated gateway/mTLS setup.
+
+`peerAddress` records the network peer (the proxy address behind a reverse proxy).
+`server.forward-headers-strategy=none` prevents forwarded headers from rewriting it;
+the filter ignores `Forwarded`, `X-Forwarded-For`, and similar caller-controlled
+address headers. Do not override that property unless deployment-specific proxy
+trust is configured and tested. `protocol` records the HTTP protocol.
+`userAgent` is bounded to 256 printable ASCII characters; control characters are
+replaced. It is also self-reported. Never put secrets in these metadata headers.
+
+A single valid W3C version-00 `traceparent` contributes `callerTraceId` and
+`callerSpanId`; malformed, duplicate and all-zero IDs are omitted. These are upstream
+references only. They do not create local spans or replace instrumentation's
+`traceId`/`spanId`. Other traceparent versions are omitted.
+
+Search `event=http.request.completed` by `callerService`, `correlationId`, or
+`callerTraceId` to follow a failed call. Completion includes `asyncTimedOut` and,
+for errors handled by the API advice, `errorCode`. Security rejections retain
+their HTTP status and caller metadata without logging credentials.
+
+For example, a completion event includes these fields alongside the standard JSON
+timestamp, level, logger, message, and service:
+
+```json
+{"event":"http.request.completed","callerService":"user-service","callerInstance":"user-service-pod-7","callerVersion":"1.2.3","callerIdentitySource":"self-reported","peerAddress":"10.0.0.2","correlationId":"request-123","httpMethod":"GET","uri":"/.well-known/jwks.json","status":"500","elapsed_ms":"12","errorCode":"INTERNAL_SERVER_ERROR","asyncTimedOut":"false"}
+```
+
+Enable only application DEBUG logs with
+`LOGGING_LEVEL_COM_JAPANESELEARNING_JWKS=DEBUG`. This adds `http.request.started`
+and `jwks.prepared` (public key count), correlated with the same caller metadata.
+Keep global `LOG_LEVEL=INFO` in production; broad framework DEBUG/TRACE logging
+can expose request details outside this filter's policy.
+
 ## Sensitive data and exceptions
 
 The request filter does not read bodies, credentials, cookies or authorization
@@ -54,7 +105,15 @@ can contain credentials or key material. Cause traversal is bounded and cycle-sa
 The starter's generated development-password logger is disabled without changing
 authentication behavior.
 
-There are currently no JWKS business operations. The global exception handler hands handled server exceptions to the request filter for a single completion log; client failures use the existing WARN completion event.
+Key loading emits `rsa.keys.loading`, `rsa.keys.loaded` (key count, active count,
+duration), or `rsa.keys.failed` (fixed stage name and zero-based configuration
+index). Stage names distinguish configuration, private/public reads, pair
+validation, duplicate identifiers and active-key validation. An index of -1 means
+failure before processing any entry. No key IDs, key file paths, or key contents
+are logged by these events. Startup/shutdown emit `application.ready` (startup
+duration) and `application.stopping`; Spring retains its standard lifecycle logs.
+
+The global exception handler hands handled server exceptions to the request filter for a single completion log; client failures use the existing WARN completion event.
 This implementation adds no endpoints or authentication changes.
 
 ## Files and retention

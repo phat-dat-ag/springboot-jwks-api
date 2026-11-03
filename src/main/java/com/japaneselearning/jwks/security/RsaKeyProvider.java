@@ -23,11 +23,15 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Component
 @RequiredArgsConstructor
 @EnableConfigurationProperties(RsaKeyProperties.class)
 @Getter
 public class RsaKeyProvider {
+    private static final Logger log = LoggerFactory.getLogger(RsaKeyProvider.class);
 
     private final RsaKeyProperties properties;
 
@@ -35,6 +39,14 @@ public class RsaKeyProvider {
 
     @PostConstruct
     public void loadKeys() {
+        long started = System.nanoTime();
+        String stage = "configuration";
+        int keyIndex = -1;
+
+        log.atInfo()
+                .addKeyValue("event", "rsa.keys.loading")
+                .log("RSA key loading started");
+
         try {
             Map<String, KeyMaterial> loaded = new LinkedHashMap<>();
             int activeCount = 0;
@@ -46,6 +58,9 @@ public class RsaKeyProvider {
             }
 
             for (RsaKeyProperties.Key config : properties.getKeys()) {
+                keyIndex++;
+                stage = "configuration";
+
                 if (config.getKid() == null || config.getKid().isBlank()) {
                     throw new IllegalStateException(
                             "RSA key kid must not be blank"
@@ -68,9 +83,13 @@ public class RsaKeyProvider {
                     activeCount++;
                 }
 
+                stage = "private-key-read";
                 PrivateKey privateKey = readPrivateKey(config.getPrivateKeyPath());
 
+                stage = "public-key-read";
                 PublicKey publicKey = readPublicKey(config.getPublicKeyPath());
+
+                stage = "key-pair-validation";
 
                 if (!(privateKey instanceof RSAPrivateCrtKey rsaPrivate)
                         || !(publicKey instanceof RSAPublicKey rsaPublic)
@@ -89,6 +108,8 @@ public class RsaKeyProvider {
                     );
                 }
 
+                stage = "duplicate-identifier-validation";
+
                 KeyMaterial previous = loaded.putIfAbsent(
                         config.getKid(),
                         new KeyMaterial(
@@ -106,6 +127,8 @@ public class RsaKeyProvider {
                 }
             }
 
+            stage = "active-key-validation";
+
             if (activeCount != 1) {
                 throw new IllegalStateException(
                         "Exactly one RSA key must be active"
@@ -114,10 +137,33 @@ public class RsaKeyProvider {
 
             keys = Collections.unmodifiableMap(loaded);
 
+            log.atInfo()
+                    .addKeyValue("event", "rsa.keys.loaded")
+                    .addKeyValue("key_count", keys.size())
+                    .addKeyValue("active_count", activeCount)
+                    .addKeyValue(
+                            "elapsed_ms",
+                            (System.nanoTime() - started) / 1_000_000
+                    )
+                    .log("RSA key loading completed");
         } catch (IOException | GeneralSecurityException exception) {
+            log.atError()
+                    .addKeyValue("event", "rsa.keys.failed")
+                    .addKeyValue("stage", stage)
+                    .addKeyValue("key_index", keyIndex)
+                    .setCause(exception).log("RSA key loading failed");
+
             throw new IllegalStateException(
                     "Failed to load RSA keys", exception
             );
+        } catch (RuntimeException exception) {
+            log.atError()
+                    .addKeyValue("event", "rsa.keys.failed")
+                    .addKeyValue("stage", stage)
+                    .addKeyValue("key_index", keyIndex)
+                    .setCause(exception).log("RSA key loading failed");
+
+            throw exception;
         }
     }
 

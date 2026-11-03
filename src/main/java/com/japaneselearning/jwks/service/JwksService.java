@@ -11,9 +11,13 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 @RequiredArgsConstructor
 public class JwksService {
+    private static final Logger log = LoggerFactory.getLogger(JwksService.class);
 
     private final RsaKeyProvider keyProvider;
 
@@ -34,6 +38,11 @@ public class JwksService {
                     );
                 })
                 .toList();
+
+        log.atDebug()
+                .addKeyValue("event", "jwks.prepared")
+                .addKeyValue("key_count", keys.size())
+                .log("JWKS public key set prepared");
 
         return new JwksResponse(keys);
     }

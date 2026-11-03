@@ -19,7 +19,20 @@ public final class StructuredJsonEncoder extends LogstashEncoder {
                 "uri",
                 "status",
                 "elapsed_ms",
-                "exception_type"
+                "exception_type",
+                "event",
+                "callerService",
+                "callerInstance",
+                "callerVersion",
+                "callerIdentitySource",
+                "peerAddress",
+                "userAgent",
+                "protocol",
+                "callerTraceId",
+                "callerSpanId",
+                "errorCode",
+                "key_count",
+                "asyncTimedOut"
         ));
 
         setThrowableConverter(new SafeThrowableConverter());
