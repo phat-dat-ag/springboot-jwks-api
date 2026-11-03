@@ -10,6 +10,8 @@ import com.japaneselearning.jwks.JwksApplication;
 import java.net.URI;
 import java.net.http.*;
 import java.nio.file.*;
+import java.security.KeyPairGenerator;
+import java.util.Base64;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,13 +33,29 @@ class LoggingConfigurationTest {
     void loadsJsonConsoleAndFileLoggingWithRotationPolicy(CapturedOutput output) throws Exception {
         String previous = System.getProperty("APP_LOG_DIR");
         System.setProperty("APP_LOG_DIR", logs.toString());
+        var generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        var pair = generator.generateKeyPair();
+        Path privateKey = logs.resolve("test-private.pem");
+        Path publicKey = logs.resolve("test-public.pem");
+        Files.writeString(privateKey, "-----BEGIN PRIVATE KEY-----\n"
+                + Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded())
+                + "\n-----END PRIVATE KEY-----");
+        Files.writeString(publicKey, "-----BEGIN PUBLIC KEY-----\n"
+                + Base64.getEncoder().encodeToString(pair.getPublic().getEncoded())
+                + "\n-----END PUBLIC KEY-----");
         try (var context = new SpringApplicationBuilder(JwksApplication.class)
-                .properties("server.port=0", "management.endpoint.health.probes.enabled=true")
+                .properties("server.port=0", "management.endpoint.health.probes.enabled=true",
+                        "app.security.jwks.keys[0].kid=test-key",
+                        "app.security.jwks.keys[0].private-key-path=" + privateKey,
+                        "app.security.jwks.keys[0].public-key-path=" + publicKey,
+                        "app.security.jwks.keys[0].active=true")
                 .run()) {
             int port = ((WebServerApplicationContext) context).getWebServer().getPort();
             var response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
                             URI.create("http://localhost:" + port + "/actuator/health/readiness"))
                     .header("X-Correlation-ID", "integration-check")
+                    .header("X-Caller-Service", "user-service")
                     .build(), HttpResponse.BodyHandlers.ofString());
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.headers().firstValue("X-Correlation-ID")).contains("integration-check");
@@ -67,10 +85,23 @@ class LoggingConfigurationTest {
                 }
             }).toList();
             assertThat(entries).anySatisfy(entry -> {
+                assertThat(entry.path("event").asText()).isEqualTo("rsa.keys.loaded");
+                assertThat(entry.path("key_count").asInt()).isEqualTo(1);
+                assertThat(entry.path("active_count").asInt()).isEqualTo(1);
+            });
+            assertThat(entries).anySatisfy(entry -> {
+                assertThat(entry.path("event").asText()).isEqualTo("application.ready");
+                assertThat(entry.path("startup_ms").asLong()).isPositive();
+            });
+            assertThat(file).doesNotContain(Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded()),
+                    privateKey.toString(), publicKey.toString());
+            assertThat(entries).anySatisfy(entry -> {
                 assertThat(entry.path("message").asText()).isEqualTo("API request completed");
                 assertThat(entry.path("service").asText()).isEqualTo("jwks-service");
                 assertThat(entry.path("correlationId").asText()).isEqualTo("integration-check");
                 assertThat(entry.path("status").asText()).isEqualTo("200");
+                assertThat(entry.path("callerService").asText()).isEqualTo("user-service");
+                assertThat(entry.path("event").asText()).isEqualTo("http.request.completed");
             });
             assertThat(output.getOut()).contains("\"service\":\"jwks-service\"", "\"correlationId\":\"integration-check\"")
                     .doesNotContain("Using generated security password");

@@ -188,6 +188,58 @@ class RequestLoggingFilterTest {
                 "query-secret", "private-key-body", "secret-token", "mdc-secret");
     }
 
+    @Test
+    void capturesCallerContextInApplicationAndAsyncCompletionLogs() throws Exception {
+        request.addHeader("X-Caller-Service", "user-service");
+        request.addHeader("X-Caller-Instance", "user-service-pod-7");
+        request.addHeader("X-Caller-Version", "1.2.3");
+        request.addHeader("User-Agent", "Java-http-client/17");
+        request.addHeader("traceparent", "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01");
+        request.addHeader("X-Forwarded-For", "203.0.113.10");
+        request.setRemoteAddr("10.0.0.2");
+        request.setAsyncSupported(true);
+        filter.doFilter(request, response, (req, res) -> {
+            assertThat(MDC.get("callerService")).isEqualTo("user-service");
+            RequestLoggingFilter.recordErrorCode(request, "INTERNAL_SERVER_ERROR");
+            req.startAsync();
+        });
+        response.setStatus(500);
+        request.getAsyncContext().complete();
+        assertThat(events).hasSize(1);
+        var json = encode(events.get(0));
+        assertThat(json.path("callerService").asText()).isEqualTo("user-service");
+        assertThat(json.path("callerInstance").asText()).isEqualTo("user-service-pod-7");
+        assertThat(json.path("callerVersion").asText()).isEqualTo("1.2.3");
+        assertThat(json.path("callerIdentitySource").asText()).isEqualTo("self-reported");
+        assertThat(json.path("peerAddress").asText()).isEqualTo("10.0.0.2");
+        assertThat(json.path("callerTraceId").asText()).isEqualTo("0123456789abcdef0123456789abcdef");
+        assertThat(json.path("callerSpanId").asText()).isEqualTo("0123456789abcdef");
+        assertThat(json.path("errorCode").asText()).isEqualTo("INTERNAL_SERVER_ERROR");
+        assertThat(json.toString()).doesNotContain("203.0.113.10");
+        assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
+    }
+
+    @Test
+    void rejectsAmbiguousCallerIdentityAndInvalidTraceAndBoundsUserAgent() throws Exception {
+        request.addHeader("X-Caller-Service", "first");
+        request.addHeader("X-Caller-Service", "second");
+        request.addHeader("X-Caller-Instance", "bad\r\nvalue");
+        request.addHeader("X-Caller-Version", "x".repeat(65));
+        request.addHeader("traceparent", "00-" + "0".repeat(32) + "-0123456789abcdef-01");
+        request.addHeader("User-Agent", "bad\r\n\u001b" + "x".repeat(300));
+        filter.doFilter(request, response, (req, res) -> {
+        });
+        var fields = events.get(0).getMDCPropertyMap();
+        assertThat(fields).containsEntry("callerService", "unknown")
+                .containsEntry("callerInstance", "unknown").containsEntry("callerVersion", "unknown")
+                .doesNotContainKeys("callerTraceId", "callerSpanId");
+        assertThat(fields.get("userAgent")).hasSize(256).doesNotContain("\r", "\n", "\u001b");
+        filter.doFilter(new MockHttpServletRequest("GET", "/"), new MockHttpServletResponse(), (a, b) -> {
+        });
+        assertThat(events.get(1).getMDCPropertyMap()).containsEntry("callerService", "unknown")
+                .containsEntry("userAgent", "unknown");
+    }
+
     private JsonNode encode(ILoggingEvent event) throws Exception {
         var encoder = new StructuredJsonEncoder();
         encoder.setContext(logger.getLoggerContext());
