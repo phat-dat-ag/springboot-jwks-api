@@ -12,11 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
-import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPublicKey;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.Collections;
@@ -67,12 +64,6 @@ public class RsaKeyProvider {
                     );
                 }
 
-                if (config.getPrivateKeyPath() == null || config.getPrivateKeyPath().isBlank()) {
-                    throw new IllegalStateException(
-                            "RSA private key path must not be blank for kid: " + config.getKid()
-                    );
-                }
-
                 if (config.getPublicKeyPath() == null || config.getPublicKeyPath().isBlank()) {
                     throw new IllegalStateException(
                             "RSA public key path must not be blank for kid: " + config.getKid()
@@ -83,28 +74,14 @@ public class RsaKeyProvider {
                     activeCount++;
                 }
 
-                stage = "private-key-read";
-                PrivateKey privateKey = readPrivateKey(config.getPrivateKeyPath());
-
                 stage = "public-key-read";
                 PublicKey publicKey = readPublicKey(config.getPublicKeyPath());
 
-                stage = "key-pair-validation";
+                stage = "public-key-validation";
 
-                if (!(privateKey instanceof RSAPrivateCrtKey rsaPrivate)
-                        || !(publicKey instanceof RSAPublicKey rsaPublic)
-                ) {
+                if (!(publicKey instanceof RSAPublicKey rsaPublic)) {
                     throw new IllegalStateException(
-                            "Configured keys must be RSA CRT private "
-                                    + "and RSA public keys"
-                    );
-                }
-
-                if (!rsaPrivate.getModulus().equals(rsaPublic.getModulus())
-                        || !rsaPrivate.getPublicExponent().equals(rsaPublic.getPublicExponent())
-                ) {
-                    throw new IllegalStateException(
-                            "RSA public/private key mismatch"
+                            "Configured keys must be RSA public keys"
                     );
                 }
 
@@ -114,7 +91,6 @@ public class RsaKeyProvider {
                         config.getKid(),
                         new KeyMaterial(
                                 config.getKid(),
-                                rsaPrivate,
                                 rsaPublic,
                                 config.isActive()
                         )
@@ -167,21 +143,6 @@ public class RsaKeyProvider {
         }
     }
 
-    private PrivateKey readPrivateKey(String filePath)
-            throws IOException, GeneralSecurityException {
-
-        String pem = Files.readString(Path.of(filePath));
-        String content = pem
-                .replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replaceAll("\\s", "");
-
-        byte[] bytes = Base64.getDecoder().decode(content);
-
-        return KeyFactory.getInstance("RSA")
-                .generatePrivate(new PKCS8EncodedKeySpec(bytes));
-    }
-
     private PublicKey readPublicKey(String filePath)
             throws IOException, GeneralSecurityException {
 
@@ -199,7 +160,6 @@ public class RsaKeyProvider {
 
     public record KeyMaterial(
             String kid,
-            RSAPrivateCrtKey privateKey,
             RSAPublicKey publicKey,
             boolean active
     ) {

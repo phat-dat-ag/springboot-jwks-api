@@ -1,6 +1,6 @@
 # JWKS Service
 
-Spring Boot 4.1.2 / Java 17 service that independently loads configured RSA keys
+Spring Boot 4.1.2 / Java 17 service that independently loads configured RSA public keys
 and publishes their public components at GET /.well-known/jwks.json.
 
 ## API responses
@@ -69,7 +69,7 @@ A fallback ERROR log is used only when no request logging state exists.
 
 `GET /.well-known/jwks.json` returns the RFC 7517 shape `{"keys":[...]}` directly,
 without APIResponse or metadata. All configured public keys are published, including
-inactive keys retained for rotation. Private key material is never returned.
+inactive keys retained for rotation. Private keys are neither loaded nor returned.
 The endpoint permits anonymous GET requests and uses `Cache-Control: max-age=300, public`.
 Swagger documentation remains available at `/swagger-ui.html`.
 
@@ -79,30 +79,30 @@ The root Compose `jwks-api` service passes these variables from the root `.env`:
 
 ```dotenv
 APP_SECURITY_JWKS_KEYS_0_KID=user-rsa-v1
-APP_SECURITY_JWKS_KEYS_0_PRIVATE_KEY_PATH=/run/keys/jwt/userservice-private-v1.pem
 APP_SECURITY_JWKS_KEYS_0_PUBLIC_KEY_PATH=/run/keys/jwt/userservice-public-v1.pem
 APP_SECURITY_JWKS_KEYS_0_ACTIVE=false
 APP_SECURITY_JWKS_KEYS_1_KID=user-rsa-v2
-APP_SECURITY_JWKS_KEYS_1_PRIVATE_KEY_PATH=/run/keys/jwt/userservice-private-v2.pem
 APP_SECURITY_JWKS_KEYS_1_PUBLIC_KEY_PATH=/run/keys/jwt/userservice-public-v2.pem
 APP_SECURITY_JWKS_KEYS_1_ACTIVE=true
 ```
 
 These are example values; no key IDs, paths, active flags, or list size are hardcoded
 in the application. Spring Boot 4.1.2 binds these exact names to
-`RsaKeyProperties.keys[0]` and `keys[1]`, including `privateKeyPath` and `publicKeyPath`.
+`RsaKeyProperties.keys[0]` and `keys[1]`, including `publicKeyPath`.
 Properties are registered by `@EnableConfigurationProperties` on `RsaKeyProvider`.
-Use contiguous indices starting at zero. To configure more keys, pass the same four
+Use contiguous indices starting at zero. To configure more keys, pass the same three
 variables with the next index through Compose as well as defining them in `.env`.
 
 Compose mounts the root `./key` directory at `/run/keys/jwt:ro`. Place the configured
-PKCS#8 PEM private keys and X.509 PEM public keys there; filenames must match the
+X.509 PEM RSA public keys there; filenames must match the
 container paths above, and files must be readable by container UID/GID 10001.
-Never commit private key files. The service reads files locally and does not call
-User Service. Sharing the existing read-only directory does not migrate key ownership.
+The service reads public files locally and does not call User Service. Keep private
+keys with the signing service. For existing deployments, remove private-key-path
+variables and restrict the JWKS mount to public files or a public-only directory;
+a shared directory containing private keys still exposes those files to the container.
 
 Startup fails for an empty key list, blank key IDs or paths, unreadable/invalid key
-files, mismatched RSA pairs, duplicate IDs, or anything other than one active key.
+public-key files, non-RSA keys, duplicate IDs, or anything other than one active key.
 The User Service configuration and JWKS endpoint remain independent and unchanged.
 
 From the root directory, validate with `docker compose config --quiet`, then build
