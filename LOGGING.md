@@ -107,7 +107,7 @@ authentication behavior.
 
 Key loading emits `rsa.keys.loading`, `rsa.keys.loaded` (key count, active count,
 duration), or `rsa.keys.failed` (fixed stage name and zero-based configuration
-index). Stage names distinguish configuration, private/public reads, pair
+index). Stage names distinguish configuration, public-key reads, public-key
 validation, duplicate identifiers and active-key validation. An index of -1 means
 failure before processing any entry. No key IDs, key file paths, or key contents
 are logged by these events. Startup/shutdown emit `application.ready` (startup

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.japaneselearning.jwks.JwksApplication;
 
 import java.net.URI;
+import java.math.BigInteger;
+import java.security.interfaces.RSAPublicKey;
 import java.net.http.*;
 import java.nio.file.*;
 import java.security.KeyPairGenerator;
@@ -36,18 +38,13 @@ class LoggingConfigurationTest {
         var generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         var pair = generator.generateKeyPair();
-        Path privateKey = logs.resolve("test-private.pem");
         Path publicKey = logs.resolve("test-public.pem");
-        Files.writeString(privateKey, "-----BEGIN PRIVATE KEY-----\n"
-                + Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded())
-                + "\n-----END PRIVATE KEY-----");
         Files.writeString(publicKey, "-----BEGIN PUBLIC KEY-----\n"
                 + Base64.getEncoder().encodeToString(pair.getPublic().getEncoded())
                 + "\n-----END PUBLIC KEY-----");
         try (var context = new SpringApplicationBuilder(JwksApplication.class)
                 .properties("server.port=0", "management.endpoint.health.probes.enabled=true",
                         "app.security.jwks.keys[0].kid=test-key",
-                        "app.security.jwks.keys[0].private-key-path=" + privateKey,
                         "app.security.jwks.keys[0].public-key-path=" + publicKey,
                         "app.security.jwks.keys[0].active=true")
                 .run()) {
@@ -59,6 +56,26 @@ class LoggingConfigurationTest {
                     .build(), HttpResponse.BodyHandlers.ofString());
             assertThat(response.statusCode()).isEqualTo(200);
             assertThat(response.headers().firstValue("X-Correlation-ID")).contains("integration-check");
+
+            var jwks = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
+                            URI.create("http://localhost:" + port + "/.well-known/jwks.json"))
+                    .build(), HttpResponse.BodyHandlers.ofString());
+            assertThat(jwks.statusCode()).isEqualTo(200);
+            assertThat(jwks.headers().firstValue("Cache-Control")).contains("max-age=300, public");
+            var payload = new ObjectMapper().readTree(jwks.body());
+            assertThat(payload.size()).isEqualTo(1);
+            assertThat(payload.path("keys").size()).isEqualTo(1);
+            var jwk = payload.path("keys").get(0);
+            assertThat(jwk.size()).isEqualTo(6);
+            assertThat(jwk.path("kid").asText()).isEqualTo("test-key");
+            assertThat(jwk.path("kty").asText()).isEqualTo("RSA");
+            assertThat(jwk.path("use").asText()).isEqualTo("sig");
+            assertThat(jwk.path("alg").asText()).isEqualTo("RS256");
+            var rsa = (RSAPublicKey) pair.getPublic();
+            assertThat(new BigInteger(1, Base64.getUrlDecoder().decode(jwk.path("n").asText())))
+                    .isEqualTo(rsa.getModulus());
+            assertThat(new BigInteger(1, Base64.getUrlDecoder().decode(jwk.path("e").asText())))
+                    .isEqualTo(rsa.getPublicExponent());
 
             var root = ((LoggerContext) LoggerFactory.getILoggerFactory()).getLogger(Logger.ROOT_LOGGER_NAME);
             var appender = (RollingFileAppender<?>) root.getAppender("FILE");
@@ -94,7 +111,7 @@ class LoggingConfigurationTest {
                 assertThat(entry.path("startup_ms").asLong()).isPositive();
             });
             assertThat(file).doesNotContain(Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded()),
-                    privateKey.toString(), publicKey.toString());
+                    publicKey.toString());
             assertThat(entries).anySatisfy(entry -> {
                 assertThat(entry.path("message").asText()).isEqualTo("API request completed");
                 assertThat(entry.path("service").asText()).isEqualTo("jwks-service");
