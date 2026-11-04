@@ -20,6 +20,5 @@ public class RsaKeyProperties {
 
         private String kid;
         private String publicKeyPath;
-        private boolean active;
     }
 }

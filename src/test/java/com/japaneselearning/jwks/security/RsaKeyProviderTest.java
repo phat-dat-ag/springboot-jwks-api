@@ -33,26 +33,32 @@ class RsaKeyProviderTest {
     }
 
     @Test
-    void loadsOnlyPublicFilesAndPublishesActiveAndRetainedKeys() throws Exception {
+    void loadsOnlyPublicFilesAndPublishesEveryConfiguredKey() throws Exception {
         Path pem = writePublicKey("public.pem", publicKey);
-        var provider = provider(key("old", pem.toString(), false), key("current", pem.toString(), true));
+        var generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        Path current = writePublicKey("current.pem", generator.generateKeyPair().getPublic());
+        Path next = writePublicKey("next.pem", generator.generateKeyPair().getPublic());
+        var provider = provider(key("old", pem.toString()), key("current", current.toString()),
+                key("next", next.toString()));
         provider.loadKeys();
 
-        assertThat(provider.getKeys()).containsOnlyKeys("old", "current");
-        assertThat(provider.getKeys().get("current").publicKey()).isEqualTo(publicKey);
+        assertThat(provider.getKeys()).containsOnlyKeys("old", "current", "next");
+        assertThat(provider.getKeys().get("old").publicKey()).isEqualTo(publicKey);
         assertThatThrownBy(() -> provider.getKeys().clear()).isInstanceOf(UnsupportedOperationException.class);
         var jwks = new JwksService(provider).getJwks();
-        assertThat(jwks.keys()).extracting(k -> k.kid()).containsExactly("old", "current");
+        assertThat(jwks.keys()).extracting(k -> k.kid()).containsExactly("old", "current", "next");
         assertThat(jwks.keys()).allSatisfy(k -> {
             assertThat(k.kty()).isEqualTo("RSA");
             assertThat(k.n()).doesNotContain("=");
+            var expected = provider.getKeys().get(k.kid()).publicKey();
             assertThat(new java.math.BigInteger(1, Base64.getUrlDecoder().decode(k.n())))
-                    .isEqualTo(publicKey.getModulus());
+                    .isEqualTo(expected.getModulus());
             assertThat(new java.math.BigInteger(1, Base64.getUrlDecoder().decode(k.e())))
-                    .isEqualTo(publicKey.getPublicExponent());
+                    .isEqualTo(expected.getPublicExponent());
         });
         try (var files = Files.list(directory)) {
-            assertThat(files.toList()).containsExactly(pem);
+            assertThat(files.toList()).containsExactlyInAnyOrder(pem, current, next);
         }
     }
 
@@ -70,7 +76,7 @@ class RsaKeyProviderTest {
     @NullAndEmptySource
     @ValueSource(strings = " ")
     void rejectsBlankKid(String kid) {
-        assertThatThrownBy(() -> provider(key(kid, "unused", true)).loadKeys())
+        assertThatThrownBy(() -> provider(key(kid, "unused")).loadKeys())
                 .isInstanceOf(IllegalStateException.class).hasMessage("RSA key kid must not be blank");
     }
 
@@ -78,37 +84,36 @@ class RsaKeyProviderTest {
     @NullAndEmptySource
     @ValueSource(strings = " ")
     void rejectsBlankPublicPath(String path) {
-        assertThatThrownBy(() -> provider(key("key", path, true)).loadKeys())
+        assertThatThrownBy(() -> provider(key("key", path)).loadKeys())
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("public key path must not be blank");
     }
 
     @Test
     void rejectsDuplicateIdentifiers() throws Exception {
         Path pem = writePublicKey("public.pem", publicKey);
-        assertThatThrownBy(() -> provider(key("same", pem.toString(), false),
-                key("same", pem.toString(), true)).loadKeys())
+        assertThatThrownBy(() -> provider(key("same", pem.toString()),
+                key("same", pem.toString())).loadKeys())
                 .isInstanceOf(IllegalStateException.class).hasMessage("Duplicate RSA key identifier");
     }
 
     @Test
-    void preservesExactlyOneActiveKeyValidation() throws Exception {
+    void loadsSinglePublicKeyWithoutActiveSelection() throws Exception {
         Path pem = writePublicKey("public.pem", publicKey);
-        for (boolean active : List.of(false, true)) {
-            assertThatThrownBy(() -> provider(key("one", pem.toString(), active),
-                    key("two", pem.toString(), active)).loadKeys())
-                    .isInstanceOf(IllegalStateException.class).hasMessage("Exactly one RSA key must be active");
-        }
+        var provider = provider(key("one", pem.toString()));
+        provider.loadKeys();
+        assertThat(new JwksService(provider).getJwks().keys())
+                .extracting(k -> k.kid()).containsExactly("one");
     }
 
     @Test
     void rejectsUnreadableAndMalformedPublicFiles() throws Exception {
         Path missing = directory.resolve("missing.pem");
-        assertThatThrownBy(() -> provider(key("key", missing.toString(), true)).loadKeys())
+        assertThatThrownBy(() -> provider(key("key", missing.toString())).loadKeys())
                 .isInstanceOf(IllegalStateException.class).hasMessage("Failed to load RSA keys")
                 .hasCauseInstanceOf(java.io.IOException.class);
         Path malformed = directory.resolve("malformed.pem");
         Files.writeString(malformed, "-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----");
-        assertThatThrownBy(() -> provider(key("key", malformed.toString(), true)).loadKeys())
+        assertThatThrownBy(() -> provider(key("key", malformed.toString())).loadKeys())
                 .isInstanceOf(IllegalStateException.class).hasMessage("Failed to load RSA keys")
                 .hasCauseInstanceOf(java.security.GeneralSecurityException.class);
     }
@@ -118,7 +123,7 @@ class RsaKeyProviderTest {
         var generator = KeyPairGenerator.getInstance("EC");
         generator.initialize(256);
         Path pem = writePublicKey("ec-public.pem", generator.generateKeyPair().getPublic());
-        assertThatThrownBy(() -> provider(key("key", pem.toString(), true)).loadKeys())
+        assertThatThrownBy(() -> provider(key("key", pem.toString())).loadKeys())
                 .isInstanceOf(IllegalStateException.class).hasMessage("Failed to load RSA keys")
                 .hasCauseInstanceOf(java.security.GeneralSecurityException.class);
     }
@@ -129,11 +134,10 @@ class RsaKeyProviderTest {
                 + "\n-----END PUBLIC KEY-----\n");
     }
 
-    private static RsaKeyProperties.Key key(String kid, String path, boolean active) {
+    private static RsaKeyProperties.Key key(String kid, String path) {
         var key = new RsaKeyProperties.Key();
         key.setKid(kid);
         key.setPublicKeyPath(path);
-        key.setActive(active);
         return key;
     }
 

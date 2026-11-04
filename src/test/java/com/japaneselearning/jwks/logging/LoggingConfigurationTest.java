@@ -45,8 +45,7 @@ class LoggingConfigurationTest {
         try (var context = new SpringApplicationBuilder(JwksApplication.class)
                 .properties("server.port=0", "management.endpoint.health.probes.enabled=true",
                         "app.security.jwks.keys[0].kid=test-key",
-                        "app.security.jwks.keys[0].public-key-path=" + publicKey,
-                        "app.security.jwks.keys[0].active=true")
+                        "app.security.jwks.keys[0].public-key-path=" + publicKey)
                 .run()) {
             int port = ((WebServerApplicationContext) context).getWebServer().getPort();
             var response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
@@ -104,7 +103,7 @@ class LoggingConfigurationTest {
             assertThat(entries).anySatisfy(entry -> {
                 assertThat(entry.path("event").asText()).isEqualTo("rsa.keys.loaded");
                 assertThat(entry.path("key_count").asInt()).isEqualTo(1);
-                assertThat(entry.path("active_count").asInt()).isEqualTo(1);
+                assertThat(entry.has("active_count")).isFalse();
             });
             assertThat(entries).anySatisfy(entry -> {
                 assertThat(entry.path("event").asText()).isEqualTo("application.ready");

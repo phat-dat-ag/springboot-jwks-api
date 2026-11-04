@@ -46,7 +46,6 @@ public class RsaKeyProvider {
 
         try {
             Map<String, KeyMaterial> loaded = new LinkedHashMap<>();
-            int activeCount = 0;
 
             if (properties.getKeys() == null || properties.getKeys().isEmpty()) {
                 throw new IllegalStateException(
@@ -70,10 +69,6 @@ public class RsaKeyProvider {
                     );
                 }
 
-                if (config.isActive()) {
-                    activeCount++;
-                }
-
                 stage = "public-key-read";
                 PublicKey publicKey = readPublicKey(config.getPublicKeyPath());
 
@@ -91,8 +86,7 @@ public class RsaKeyProvider {
                         config.getKid(),
                         new KeyMaterial(
                                 config.getKid(),
-                                rsaPublic,
-                                config.isActive()
+                                rsaPublic
                         )
                 );
 
@@ -103,20 +97,11 @@ public class RsaKeyProvider {
                 }
             }
 
-            stage = "active-key-validation";
-
-            if (activeCount != 1) {
-                throw new IllegalStateException(
-                        "Exactly one RSA key must be active"
-                );
-            }
-
             keys = Collections.unmodifiableMap(loaded);
 
             log.atInfo()
                     .addKeyValue("event", "rsa.keys.loaded")
                     .addKeyValue("key_count", keys.size())
-                    .addKeyValue("active_count", activeCount)
                     .addKeyValue(
                             "elapsed_ms",
                             (System.nanoTime() - started) / 1_000_000
@@ -160,8 +145,7 @@ public class RsaKeyProvider {
 
     public record KeyMaterial(
             String kid,
-            RSAPublicKey publicKey,
-            boolean active
+            RSAPublicKey publicKey
     ) {
     }
 }
