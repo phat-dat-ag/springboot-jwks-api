@@ -20,5 +20,8 @@ public class RsaKeyProperties {
 
         private String kid;
         private String publicKeyPath;
+        private KeyOwner owner;
     }
+
+    public enum KeyOwner {USER, LEARNING}
 }

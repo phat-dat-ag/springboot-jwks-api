@@ -20,7 +20,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/.well-known/jwks.json",
+                                "/api/v1/jwks",
+                                "/api/v1/jwks/**",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
                                 "/v3/api-docs",

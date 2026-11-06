@@ -57,7 +57,7 @@ public class RsaKeyProvider {
                 keyIndex++;
                 stage = "configuration";
 
-                if (config.getKid() == null || config.getKid().isBlank()) {
+                if (config == null || config.getKid() == null || config.getKid().isBlank()) {
                     throw new IllegalStateException(
                             "RSA key kid must not be blank"
                     );
@@ -70,6 +70,11 @@ public class RsaKeyProvider {
                 }
 
                 stage = "public-key-read";
+
+                if (config.getOwner() == null) {
+                    throw new IllegalStateException("RSA key owner must be configured");
+                }
+
                 PublicKey publicKey = readPublicKey(config.getPublicKeyPath());
 
                 stage = "public-key-validation";
@@ -86,7 +91,8 @@ public class RsaKeyProvider {
                         config.getKid(),
                         new KeyMaterial(
                                 config.getKid(),
-                                rsaPublic
+                                rsaPublic,
+                                config.getOwner()
                         )
                 );
 
@@ -145,7 +151,8 @@ public class RsaKeyProvider {
 
     public record KeyMaterial(
             String kid,
-            RSAPublicKey publicKey
+            RSAPublicKey publicKey,
+            RsaKeyProperties.KeyOwner owner
     ) {
     }
 }

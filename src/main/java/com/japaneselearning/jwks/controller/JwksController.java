@@ -2,6 +2,10 @@ package com.japaneselearning.jwks.controller;
 
 import com.japaneselearning.jwks.dto.response.JwksResponse;
 import com.japaneselearning.jwks.service.JwksService;
+import com.japaneselearning.jwks.config.RsaKeyProperties.KeyOwner;
+import com.japaneselearning.jwks.common.exception.BusinessException;
+import com.japaneselearning.jwks.common.exception.ErrorCode;
+import org.springframework.web.bind.annotation.PathVariable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -36,11 +40,20 @@ public class JwksController {
                     schema = @Schema(implementation = JwksResponse.class)
             )
     )
-    @GetMapping("/.well-known/jwks.json")
-    public ResponseEntity<@NonNull JwksResponse> getJwks() {
+    @GetMapping("/api/v1/jwks/{owner}")
+    public ResponseEntity<@NonNull JwksResponse> getJwks(
+            @PathVariable
+            String owner
+    ) {
+        KeyOwner keyOwner = switch (owner) {
+            case "user" -> KeyOwner.USER;
+            case "learning" -> KeyOwner.LEARNING;
+            default -> throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        };
+
         return ResponseEntity.ok()
                 .cacheControl(
                         CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic()
-                ).body(jwksService.getJwks());
+                ).body(jwksService.getJwks(keyOwner));
     }
 }
