@@ -1,7 +1,7 @@
 # JWKS Service
 
 Spring Boot 4.1.2 / Java 17 service that independently loads configured RSA public keys
-and publishes their public components at GET /.well-known/jwks.json.
+and publishes their public components at GET /api/v1/jwks/user.
 
 ## API responses
 
@@ -65,50 +65,54 @@ logs 4xx at WARN and 5xx at ERROR, with one completion event carrying safe serve
 diagnostics. The advice records handled server exceptions for that event.
 A fallback ERROR log is used only when no request logging state exists.
 
-## JWKS compatibility
+## JWKS contract and ownership
 
-`GET /.well-known/jwks.json` returns the RFC 7517 shape `{"keys":[...]}` directly,
-without APIResponse or metadata. All configured public keys are published and
-remain usable for verification until removed from the configuration. Private keys are neither loaded nor returned.
-The endpoint permits anonymous GET requests and uses `Cache-Control: max-age=300, public`.
-Swagger documentation remains available at `/swagger-ui.html`.
+`GET /api/v1/jwks/{owner}` accepts `user` and `learning` (lowercase).
+Each response is standard unwrapped `{"keys":[...]}` with RSA fields
+`kty`, `use`, `alg`, `kid`, `n`, and `e`; owner and private material are never returned.
+Only keys explicitly configured for the requested owner are published. Unknown or missing
+owners return controlled 404 responses; empty configured groups return an empty key set.
+Responses are publicly cached for five minutes. There are no legacy compatibility endpoints.
 
-## RSA configuration in Docker
+## Public-key configuration
 
-The root Compose `jwks-api` service passes these variables from the root `.env`:
+Compose reads `.env.jwks-api`. Copy the root `.env.jwks-api.example` on a fresh checkout.
+Use contiguous indices and globally unique key IDs. Example:
 
 ```dotenv
 APP_SECURITY_JWKS_KEYS_0_KID=user-rsa-v1
-APP_SECURITY_JWKS_KEYS_0_PUBLIC_KEY_PATH=/run/keys/jwt/userservice-public-v1.pem
+APP_SECURITY_JWKS_KEYS_0_PUBLICKEYPATH=/run/keys/jwt/userservice-public-v1.pem
+APP_SECURITY_JWKS_KEYS_0_OWNER=USER
 APP_SECURITY_JWKS_KEYS_1_KID=user-rsa-v2
-APP_SECURITY_JWKS_KEYS_1_PUBLIC_KEY_PATH=/run/keys/jwt/userservice-public-v2.pem
+APP_SECURITY_JWKS_KEYS_1_PUBLICKEYPATH=/run/keys/jwt/userservice-public-v2.pem
+APP_SECURITY_JWKS_KEYS_1_OWNER=USER
+APP_SECURITY_JWKS_KEYS_2_KID=learning-rsa-v1
+APP_SECURITY_JWKS_KEYS_2_PUBLICKEYPATH=/run/keys/learning/learningservice-public-v1.pem
+APP_SECURITY_JWKS_KEYS_2_OWNER=LEARNING
 ```
 
-These are example values; no key IDs, paths, or list size are hardcoded
-in the application. Spring Boot 4.1.2 binds these exact names to
-`RsaKeyProperties.keys[0]` and `keys[1]`, including `publicKeyPath`.
-Properties are registered by `@EnableConfigurationProperties` on `RsaKeyProvider`.
-Use contiguous indices starting at zero. To configure more keys, pass the same two
-variables with the next index through Compose as well as defining them in `.env`.
+`PUBLICKEYPATH` is Spring's canonical environment spelling for `publicKeyPath`; underscores
+between those words create a different property. Missing/invalid owners, invalid RSA public
+PEMs, missing files and duplicate IDs fail startup. Ownership is trusted deployment configuration,
+not inferred from names or token claims. JWKS has no active signing key and imposes no active count.
+User and Learning independently require exactly one active private signing key each.
 
-Compose mounts the root `./key` directory at `/run/keys/jwt:ro`. Place the configured
-X.509 PEM RSA public keys there; filenames must match the
-container paths above, and files must be readable by container UID/GID 10001.
-The service reads public files locally and does not call User Service. Keep private
-keys with the signing service. For existing deployments, remove private-key-path
-variables and restrict the JWKS mount to public files or a public-only directory;
-a shared directory containing private keys still exposes those files to the container.
+The root Compose mounts only three individual public PEM files, read-only, with host-path
+creation disabled. No private key or signing directory is mounted in JWKS. The existing host
+files stay in `key/` and `data/keys/learning/`; no copying or key regeneration is required.
+Future rotation needs another public file mount and indexed entry; retain old public keys
+until all issued tokens and applicable caches have expired.
 
-Startup fails for an empty key list, blank key IDs or paths, unreadable/invalid key
-public-key files, non-RSA keys, or duplicate IDs. There is no public-key active
-flag; key presence controls publication. Private signing-key selection is owned
-by the issuing service.
-The User Service configuration and JWKS endpoint remain independent and unchanged.
+User and Learning's user-token decoders trust `/api/v1/jwks/user`. User's internal decoder
+trusts only `/api/v1/jwks/learning`, with its own issuer/audience/type/time rules. Key discovery
+is not authorization. No decoder chooses its key source from unverified token claims.
 
-From the root directory, validate with `docker compose config --quiet`, then build
-and start only this service with `docker compose up -d --build --no-deps jwks-api`.
-Check `http://127.0.0.1:8783/.well-known/jwks.json` (or the configured
-`JWKS_API_HOST_PORT`).
+```cmd
+docker compose config --quiet
+docker compose -p springboot_project up -d --build --no-deps jwks-api
+curl.exe http://localhost:8783/api/v1/jwks/user
+curl.exe http://localhost:8783/api/v1/jwks/learning
+```
 
 ## Tests
 

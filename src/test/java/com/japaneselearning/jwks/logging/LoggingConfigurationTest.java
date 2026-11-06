@@ -45,7 +45,8 @@ class LoggingConfigurationTest {
         try (var context = new SpringApplicationBuilder(JwksApplication.class)
                 .properties("server.port=0", "management.endpoint.health.probes.enabled=true",
                         "app.security.jwks.keys[0].kid=test-key",
-                        "app.security.jwks.keys[0].public-key-path=" + publicKey)
+                        "app.security.jwks.keys[0].public-key-path=" + publicKey,
+                        "app.security.jwks.keys[0].owner=USER")
                 .run()) {
             int port = ((WebServerApplicationContext) context).getWebServer().getPort();
             var response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
@@ -57,7 +58,7 @@ class LoggingConfigurationTest {
             assertThat(response.headers().firstValue("X-Correlation-ID")).contains("integration-check");
 
             var jwks = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
-                            URI.create("http://localhost:" + port + "/.well-known/jwks.json"))
+                            URI.create("http://localhost:" + port + "/api/v1/jwks/user"))
                     .build(), HttpResponse.BodyHandlers.ofString());
             assertThat(jwks.statusCode()).isEqualTo(200);
             assertThat(jwks.headers().firstValue("Cache-Control")).contains("max-age=300, public");

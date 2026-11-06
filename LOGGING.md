@@ -84,7 +84,7 @@ For example, a completion event includes these fields alongside the standard JSO
 timestamp, level, logger, message, and service:
 
 ```json
-{"event":"http.request.completed","callerService":"user-service","callerInstance":"user-service-pod-7","callerVersion":"1.2.3","callerIdentitySource":"self-reported","peerAddress":"10.0.0.2","correlationId":"request-123","httpMethod":"GET","uri":"/.well-known/jwks.json","status":"500","elapsed_ms":"12","errorCode":"INTERNAL_SERVER_ERROR","asyncTimedOut":"false"}
+{"event":"http.request.completed","callerService":"user-service","callerInstance":"user-service-pod-7","callerVersion":"1.2.3","callerIdentitySource":"self-reported","peerAddress":"10.0.0.2","correlationId":"request-123","httpMethod":"GET","uri":"/api/v1/jwks/user","status":"500","elapsed_ms":"12","errorCode":"INTERNAL_SERVER_ERROR","asyncTimedOut":"false"}
 ```
 
 Enable only application DEBUG logs with

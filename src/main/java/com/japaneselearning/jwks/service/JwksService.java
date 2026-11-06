@@ -3,6 +3,7 @@ package com.japaneselearning.jwks.service;
 import com.japaneselearning.jwks.dto.response.JwkResponse;
 import com.japaneselearning.jwks.dto.response.JwksResponse;
 import com.japaneselearning.jwks.security.RsaKeyProvider;
+import com.japaneselearning.jwks.config.RsaKeyProperties.KeyOwner;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -10,6 +11,7 @@ import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,10 +23,13 @@ public class JwksService {
 
     private final RsaKeyProvider keyProvider;
 
-    public JwksResponse getJwks() {
+    public JwksResponse getJwks(KeyOwner owner) {
+        Objects.requireNonNull(owner, "Key owner is required");
+
         List<JwkResponse> keys = keyProvider.getKeys()
                 .values()
                 .stream()
+                .filter(key -> key.owner() == owner)
                 .map(key -> {
                     var publicKey = key.publicKey();
 
