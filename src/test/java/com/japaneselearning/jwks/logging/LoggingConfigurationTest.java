@@ -47,7 +47,7 @@ class LoggingConfigurationTest {
                         "app.security.jwks.keys[0].kid=test-key",
                         "app.security.jwks.keys[0].public-key-path=" + publicKey,
                         "app.security.jwks.keys[0].owner=USER")
-                .run()) {
+                .run("--app.version=phase0-test-version", "--app.deployment-environment=test")) {
             int port = ((WebServerApplicationContext) context).getWebServer().getPort();
             var response = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
                             URI.create("http://localhost:" + port + "/actuator/health/readiness"))
@@ -115,6 +115,11 @@ class LoggingConfigurationTest {
             assertThat(entries).anySatisfy(entry -> {
                 assertThat(entry.path("message").asText()).isEqualTo("API request completed");
                 assertThat(entry.path("service").asText()).isEqualTo("jwks-service");
+                assertThat(entry.path("serviceVersion").asText()).isEqualTo("phase0-test-version");
+                assertThat(entry.path("environment").asText()).isEqualTo("test");
+                assertThat(entry.has("SERVICE_NAME")).isFalse();
+                assertThat(entry.has("SERVICE_VERSION")).isFalse();
+                assertThat(entry.has("DEPLOYMENT_ENVIRONMENT")).isFalse();
                 assertThat(entry.path("correlationId").asText()).isEqualTo("integration-check");
                 assertThat(entry.path("status").asText()).isEqualTo("200");
                 assertThat(entry.path("callerService").asText()).isEqualTo("user-service");
