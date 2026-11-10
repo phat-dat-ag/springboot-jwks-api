@@ -109,7 +109,7 @@ public class RsaKeyProvider {
                     .addKeyValue("event", "rsa.keys.loaded")
                     .addKeyValue("key_count", keys.size())
                     .addKeyValue(
-                            "elapsed_ms",
+                            "durationMs",
                             (System.nanoTime() - started) / 1_000_000
                     )
                     .log("RSA key loading completed");

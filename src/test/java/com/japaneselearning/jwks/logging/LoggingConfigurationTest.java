@@ -59,6 +59,8 @@ class LoggingConfigurationTest {
 
             var jwks = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
                             URI.create("http://localhost:" + port + "/api/v1/jwks/user"))
+                    .header("X-Correlation-ID", "integration-check")
+                    .header("X-Caller-Service", "user-service")
                     .build(), HttpResponse.BodyHandlers.ofString());
             assertThat(jwks.statusCode()).isEqualTo(200);
             assertThat(jwks.headers().firstValue("Cache-Control")).contains("max-age=300, public");
@@ -121,7 +123,9 @@ class LoggingConfigurationTest {
                 assertThat(entry.has("SERVICE_VERSION")).isFalse();
                 assertThat(entry.has("DEPLOYMENT_ENVIRONMENT")).isFalse();
                 assertThat(entry.path("correlationId").asText()).isEqualTo("integration-check");
-                assertThat(entry.path("status").asText()).isEqualTo("200");
+                assertThat(entry.path("http.response.status_code").isIntegralNumber()).isTrue();
+                assertThat(entry.path("http.response.status_code").asInt()).isEqualTo(200);
+                assertThat(entry.path("durationMs").isNumber()).isTrue();
                 assertThat(entry.path("callerService").asText()).isEqualTo("user-service");
                 assertThat(entry.path("event").asText()).isEqualTo("http.request.completed");
             });

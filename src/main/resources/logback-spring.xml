@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <springProperty scope="context" name="SERVICE_NAME" source="spring.application.name" defaultValue="jwks-service"/>
-    <!-- Stable metadata only; request-field/schema migration belongs to Phase 1. -->
+    <!-- Stable identity is shared with the Phase 1 request schema. -->
     <springProperty
             scope="context"
             name="SERVICE_VERSION"
@@ -19,13 +19,9 @@
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="com.japaneselearning.jwks.logging.StructuredJsonEncoder">
-            <customFields>
-                {
-                "service":"${SERVICE_NAME}",
-                "serviceVersion":"${SERVICE_VERSION}",
-                "environment":"${DEPLOYMENT_ENVIRONMENT}"
-                }
-            </customFields>
+            <serviceName>${SERVICE_NAME}</serviceName>
+            <serviceVersion>${SERVICE_VERSION}</serviceVersion>
+            <environment>${DEPLOYMENT_ENVIRONMENT}</environment>
         </encoder>
     </appender>
 
@@ -39,13 +35,9 @@
             <cleanHistoryOnStart>true</cleanHistoryOnStart>
         </rollingPolicy>
         <encoder class="com.japaneselearning.jwks.logging.StructuredJsonEncoder">
-            <customFields>
-                {
-                "service":"${SERVICE_NAME}",
-                "serviceVersion":"${SERVICE_VERSION}",
-                "environment":"${DEPLOYMENT_ENVIRONMENT}"
-                }
-            </customFields>
+            <serviceName>${SERVICE_NAME}</serviceName>
+            <serviceVersion>${SERVICE_VERSION}</serviceVersion>
+            <environment>${DEPLOYMENT_ENVIRONMENT}</environment>
         </encoder>
     </appender>
 
