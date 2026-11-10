@@ -34,13 +34,20 @@ public final class SafeThrowableConverter extends ThrowableHandlingConverter {
             Set<IThrowableProxy> seen,
             int depth
     ) {
-        if (error == null || !seen.add(error) || depth >= 16) {
+        if (error == null || !seen.add(error) || depth >= 8 || seen.size() > 16 || result.length() >= 8192) {
             return;
         }
 
         result.append(prefix).append(error.getClassName()).append(" [message omitted]\n");
 
+        int frames = 0;
+
         for (var frame : error.getStackTraceElementProxyArray()) {
+            if (frames++ >= 64 || result.length() >= 8192) {
+                result.append("\t[remaining frames omitted]\n");
+
+                break;
+            }
             result.append("\tat ").append(frame.getStackTraceElement()).append('\n');
         }
 
