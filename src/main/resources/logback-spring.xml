@@ -26,12 +26,12 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_DIR}/${APP_NAME}.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_DIR}/archive/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-            <maxFileSize>100MB</maxFileSize>
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>2GB</totalSizeCap>
+            <!-- No fixed file: each spool filename stays stable across rollover. -->
+            <fileNamePattern>${LOG_DIR}/spool/${APP_NAME}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>${APP_LOG_MAX_FILE_SIZE:-100MB}</maxFileSize>
+            <maxHistory>${APP_LOG_MAX_HISTORY:-30}</maxHistory>
+            <totalSizeCap>${APP_LOG_TOTAL_SIZE_CAP:-2GB}</totalSizeCap>
             <cleanHistoryOnStart>true</cleanHistoryOnStart>
         </rollingPolicy>
         <encoder class="com.japaneselearning.jwks.logging.StructuredJsonEncoder">

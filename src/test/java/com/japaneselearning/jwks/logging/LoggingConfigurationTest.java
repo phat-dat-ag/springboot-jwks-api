@@ -10,8 +10,11 @@ import com.japaneselearning.jwks.JwksApplication;
 import java.net.URI;
 import java.math.BigInteger;
 import java.security.interfaces.RSAPublicKey;
-import java.net.http.*;
-import java.nio.file.*;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
 
@@ -24,7 +27,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(OutputCaptureExtension.class)
 class LoggingConfigurationTest {
@@ -86,13 +89,20 @@ class LoggingConfigurationTest {
             assertThat(policy.isStarted()).isTrue();
             assertThat(policy.getMaxHistory()).isEqualTo(30);
             assertThat(policy.isCleanHistoryOnStart()).isTrue();
-            assertThat(policy.getFileNamePattern()).endsWith("archive/jwks-api.%d{yyyy-MM-dd}.%i.log.gz");
+            assertThat(policy.getFileNamePattern())
+                    .endsWith("spool/jwks-api.%d{yyyy-MM-dd}.%i.log");
+            assertThat(appender.rawFileProperty()).isNull();
 
             var mapper = new ObjectMapper();
             // Request completion is logged after the HTTP response may have reached the client.
             String file = "";
             for (int i = 0; i < 100; i++) {
-                file = Files.readString(logs.resolve("jwks-api.log"));
+                try (var files = Files.list(logs.resolve("spool"))) {
+                    Path current = files.filter(Files::isRegularFile)
+                            .findFirst()
+                            .orElseThrow();
+                    file = Files.readString(current);
+                }
                 if (file.contains("API request completed")) break;
                 Thread.sleep(20);
             }

@@ -28,7 +28,10 @@ public class MetricsEndpointConfiguration {
     )
     Connector metricsConnector(
             @Value("${app.metrics.listener.port:9091}")
-            int port
+            int port,
+
+            @Value("${app.metrics.listener.address:0.0.0.0}")
+            String address
     ) {
         if (port < 0 || port > 65535)
             throw new IllegalArgumentException("Invalid metrics listener port");
@@ -36,7 +39,13 @@ public class MetricsEndpointConfiguration {
         Connector connector = new Connector(TomcatServletWebServerFactory.DEFAULT_PROTOCOL);
 
         connector.setPort(port);
-        connector.setProperty("address", "0.0.0.0");
+        if (!"0.0.0.0".equals(address)
+                && !"127.0.0.1".equals(address)
+        ) {
+            throw new IllegalArgumentException("Unsupported metrics listener address");
+        }
+
+        connector.setProperty("address", address);
         connector.setProperty("maxThreads", "8");
         connector.setProperty("maxConnections", "32");
         connector.setProperty("acceptCount", "16");
