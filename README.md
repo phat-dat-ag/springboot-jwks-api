@@ -121,3 +121,19 @@ Tests cover factories, Jackson serialization, exception status mapping,
 validation, MVC errors, security pass-through, metadata, raw response
 preservation, and existing structured logging. Test controllers are fixtures only;
 no external services or RSA private keys are used.
+
+### Complete runtime environment template
+
+The submodule `.env.example` / ignored `.env` contain the standalone listener,
+public-key list, health, logging/spool retention, metrics and tracing defaults.
+Spring does not load dotenv automatically: export through the launcher/IDE.
+Public-key paths must point to existing matching RSA public files; no private key
+belongs in this service. `APP_VERSION` documents this checkout's artifact version;
+update it with releases or leave it unset when launching without the template to
+use Maven's filtered version. The parent Compose deployment loads root
+`.env.jwks-api`, then explicitly overrides its listener/log path, log level and
+deployment environment. Both local projects reuse existing public files read-only;
+their JWKS processes and log volumes are separate. Parent production-like uses
+`production` telemetry metadata, without changing owners, IDs or trust endpoints.
+Metrics and remote exporters stay independently opt-in as documented in the
+template. See the parent [environment guide](../README.md#environment-configuration).
