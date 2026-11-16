@@ -1,5 +1,14 @@
 # JWKS Service
 
+For the complete Japanese Learning Docker stack, follow the parent repository's
+[clone and first-time setup guide](../README.md#getting-started). It initializes
+root service dotenv inputs and provisions matching JWT/P07 files before startup.
+This repository's `.env.example` is for native/service configuration; it is not
+loaded automatically by every framework and is not a substitute for the parent
+Compose setup. If cloned standalone, obtain the [root repository](https://github.com/phat-dat-ag/japanese-learning);
+the relative guide link requires the submodule checkout layout.
+
+
 Spring Boot 4.1.2 / Java 17 service that independently loads configured RSA public keys
 and publishes their public components at GET /api/v1/jwks/user.
 
